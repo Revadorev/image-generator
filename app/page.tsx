@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Loader2, Plus, Trash2, Image, Download, AlertCircle } from "lucide-react";
+import { Loader2, Plus, Trash2, Image, Download, AlertCircle, Check } from "lucide-react";
 
 interface GeneratedImage {
   id: string;
@@ -11,10 +11,57 @@ interface GeneratedImage {
   error?: string;
 }
 
+interface PromptTemplate {
+  key: string;
+  label: string;
+  value: string;
+  enabled: boolean;
+}
+
+const DEFAULT_TEMPLATES: PromptTemplate[] = [
+  {
+    key: "main",
+    label: "MAIN",
+    value: "White background, product centered, no text, clean shadow",
+    enabled: true,
+  },
+  {
+    key: "infographic",
+    label: "INFOGRAPHIC",
+    value: "Icons + Romanian labels, highlight features visually",
+    enabled: true,
+  },
+  {
+    key: "lifestyle",
+    label: "LIFESTYLE",
+    value: "Child using product in real environment (bedroom, school)",
+    enabled: true,
+  },
+  {
+    key: "benefits",
+    label: "BENEFITS",
+    value: "Focus on emotional benefits (safety, communication)",
+    enabled: true,
+  },
+  {
+    key: "specs",
+    label: "SPECS",
+    value: "Dimensions, technical specs, structured layout",
+    enabled: true,
+  },
+  {
+    key: "premium",
+    label: "PREMIUM",
+    value: "Dark or gradient background, luxury lighting",
+    enabled: true,
+  },
+];
+
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [prompts, setPrompts] = useState<string[]>(["", "", "", ""]);
   const [variantsCount, setVariantsCount] = useState<number>(4);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>(DEFAULT_TEMPLATES);
   const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
@@ -55,6 +102,12 @@ export default function Home() {
       return;
     }
 
+    const enabledTemplates = promptTemplates.filter((template) => template.enabled);
+    if (enabledTemplates.length === 0) {
+      setError("Activează cel puțin un tip de imagine!");
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
@@ -67,6 +120,7 @@ export default function Home() {
           referenceImage: await fileToBase64(referenceImage),
           variantsCount: variantsCount,
           sessionId: "default",
+          templates: enabledTemplates,
         }),
       });
 
@@ -251,6 +305,47 @@ export default function Home() {
               )}
             </div>
 
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Tipuri de imagine</h2>
+                <button
+                  type="button"
+                  onClick={() => setPromptTemplates(DEFAULT_TEMPLATES)}
+                  className="text-xs text-purple-600 hover:underline"
+                >
+                  Reset default
+                </button>
+              </div>
+              <div className="space-y-3">
+                {promptTemplates.map((template, index) => (
+                  <div key={template.key} className="border rounded-lg p-3 space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={template.enabled}
+                        onChange={(e) => {
+                          const next = [...promptTemplates];
+                          next[index] = { ...next[index], enabled: e.target.checked };
+                          setPromptTemplates(next);
+                        }}
+                      />
+                      {template.label}
+                    </label>
+                    <textarea
+                      value={template.value}
+                      onChange={(e) => {
+                        const next = [...promptTemplates];
+                        next[index] = { ...next[index], value: e.target.value };
+                        setPromptTemplates(next);
+                      }}
+                      className="w-full resize-none border-2 border-gray-300 rounded-lg p-2 text-sm focus:border-purple-500 focus:outline-none"
+                      rows={2}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-white rounded-xl shadow-lg p-6 space-y-3">
               <h2 className="text-lg font-semibold">Acțiuni</h2>
               {!showPromptPreview ? (
@@ -347,28 +442,43 @@ export default function Home() {
               <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-semibold">
-                    Prompturi generate de GPT-5.4-pro ({generatedPrompts.length})
+                    Prompturi generate de GPT-5.3 ({generatedPrompts.length})
                   </h2>
                   <span className="text-sm text-green-600 font-medium">Editează și apoi generează imaginile</span>
                 </div>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {generatedPrompts.map((prompt, idx) => (
-                    <div key={idx} className="border-2 border-green-200 rounded-lg p-3 bg-green-50">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-semibold text-green-700">Variantă {idx + 1}</span>
+                <div className="space-y-3 max-h-[32rem] overflow-y-auto">
+                  {generatedPrompts.map((prompt, idx) => {
+                    const template = promptTemplates.filter((t) => t.enabled)[idx % Math.max(1, promptTemplates.filter((t) => t.enabled).length)];
+                    return (
+                      <div key={idx} className="border-2 border-green-200 rounded-lg p-3 bg-green-50">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-green-700">
+                            {template ? `${template.label} · Variantă ${idx + 1}` : `Variantă ${idx + 1}`}
+                          </span>
+                          <button
+                            className="text-xs text-green-700 hover:underline"
+                            onClick={() => {
+                              const next = [...generatedPrompts];
+                              next[idx] = promptTemplates.filter((t) => t.enabled)[idx % Math.max(1, promptTemplates.filter((t) => t.enabled).length)]?.value || prompt;
+                              setGeneratedPrompts(next);
+                            }}
+                          >
+                            Restore template
+                          </button>
+                        </div>
+                        <textarea
+                          value={prompt}
+                          onChange={(e) => {
+                            const newPrompts = [...generatedPrompts];
+                            newPrompts[idx] = e.target.value;
+                            setGeneratedPrompts(newPrompts);
+                          }}
+                          className="w-full resize-none border-2 border-green-300 rounded-lg p-3 focus:border-green-500 focus:outline-none bg-white"
+                          rows={4}
+                        />
                       </div>
-                      <textarea
-                        value={prompt}
-                        onChange={(e) => {
-                          const newPrompts = [...generatedPrompts];
-                          newPrompts[idx] = e.target.value;
-                          setGeneratedPrompts(newPrompts);
-                        }}
-                        className="w-full resize-none border-2 border-green-300 rounded-lg p-3 focus:border-green-500 focus:outline-none bg-white"
-                        rows={3}
-                      />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

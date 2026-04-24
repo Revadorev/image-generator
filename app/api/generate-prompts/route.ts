@@ -11,11 +11,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
+interface PromptTemplate {
+  key: string;
+  label: string;
+  value: string;
+  enabled: boolean;
+}
+
 interface PromptRequest {
   userRequest: string;
   referenceImage?: string;
   variantsCount?: number;
   sessionId?: string;
+  templates?: PromptTemplate[];
 }
 
 const ECOMMERCE_SYSTEM_PROMPT = `You are a senior ecommerce designer specialized in marketplace images (eMAG style).
@@ -102,13 +110,20 @@ async function generatePromptVariants(
   userRequest: string,
   imageAnalysis: string,
   count: number,
-  sessionId: string
+  sessionId: string,
+  templates: PromptTemplate[] = []
 ): Promise<string[]> {
   const conversationHistory = await loadConversationHistory(sessionId);
 
+  const templateText = templates.length
+    ? `\n\nAvailable image types and base prompts:\n${templates
+        .map((template) => `- ${template.label}: ${template.value}`)
+        .join("\n")}`
+    : "";
+
   conversationHistory.push({
     role: "user",
-    content: `User request: ${userRequest}\n\nReference image analysis: ${imageAnalysis}\n\nGenerate ${count} creative prompt variations that maintain the visual style from the analysis. Remember our previous conversations and preferences. Return a JSON object with a "prompts" array.`,
+    content: `User request: ${userRequest}\n\nReference image analysis: ${imageAnalysis}${templateText}\n\nGenerate ${count} creative prompt variations that maintain the visual style from the analysis and match the selected image types. Remember our previous conversations and preferences. Return a JSON object with a "prompts" array.`,
   });
 
   const response = await openai.chat.completions.create({
@@ -138,7 +153,7 @@ async function generatePromptVariants(
 export async function POST(req: NextRequest) {
   try {
     const body: PromptRequest = await req.json();
-    const { userRequest, referenceImage, variantsCount = 4, sessionId = "default" } = body;
+    const { userRequest, referenceImage, variantsCount = 4, sessionId = "default", templates = [] } = body;
 
     if (!userRequest) {
       return NextResponse.json(
@@ -163,7 +178,8 @@ export async function POST(req: NextRequest) {
       userRequest,
       imageAnalysis,
       variantsCount,
-      sessionId
+      sessionId,
+      templates
     );
 
     return NextResponse.json({ prompts });
