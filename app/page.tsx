@@ -114,9 +114,9 @@ export default function Home() {
       return;
     }
 
-    const enabledTemplates = promptTemplates.filter((template) => template.enabled);
+    const enabledTemplates = DEFAULT_TEMPLATES.filter((template) => promptTypes.includes(template.key));
     if (enabledTemplates.length === 0) {
-      setError("Activează cel puțin un tip de imagine!");
+      setError("Alege cel puțin un tip de imagine!");
       return;
     }
 
