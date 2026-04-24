@@ -96,7 +96,7 @@ async function analyzeReferenceImage(base64Image: string): Promise<string> {
         ],
       },
     ],
-    max_tokens: 500,
+    max_completion_tokens: 500,
   });
 
   return response.choices[0].message.content || "";
@@ -121,7 +121,7 @@ async function generatePromptVariants(
   const response = await openai.chat.completions.create({
     model: "gpt-5.3-chat-latest", // Cel mai avansat model GPT-5
     messages: conversationHistory as any,
-    max_tokens: 1500,
+    max_completion_tokens: 1500,
     response_format: { type: "json_object" },
   });
 
