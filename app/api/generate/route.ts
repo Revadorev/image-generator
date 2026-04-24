@@ -8,6 +8,7 @@ const openai = new OpenAI({
 interface ImageRequest {
   prompts: string[];
   referenceImage?: string; // base64
+  variantsCount?: number; // câte variante să genereze AI-ul
 }
 
 // Analizează imaginea de referință cu GPT-4 Vision
@@ -37,34 +38,44 @@ async function analyzeReferenceImage(base64Image: string): Promise<string> {
   return response.choices[0].message.content || "";
 }
 
-// Agent AI care combină analiza imaginii cu promptul utilizatorului
-async function createOptimizedPrompt(
-  userPrompt: string,
-  imageAnalysis: string
-): Promise<string> {
+// Agent AI care generează multiple variante de prompturi
+async function generatePromptVariants(
+  userRequest: string,
+  imageAnalysis: string,
+  count: number = 4
+): Promise<string[]> {
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         role: "system",
         content:
-          "You are an expert prompt engineer for image generation. Your job is to combine the user's request with the visual analysis of a reference image to create the perfect prompt for gpt-image-1. Be specific about style, colors, composition, and technical details. Keep the prompt under 1000 characters.",
+          `You are an expert prompt engineer for image generation. Generate exactly ${count} different creative prompt variations based on the user's request and reference image analysis. Each prompt should be unique and explore different angles, compositions, or styles while maintaining the core request. Return a JSON object with a "prompts" array containing the ${count} variations.`,
       },
       {
         role: "user",
-        content: `User request: ${userPrompt}\n\nReference image analysis: ${imageAnalysis}\n\nCreate an optimized prompt that combines both, maintaining the visual style of the reference while fulfilling the user's request.`,
+        content: `User request: ${userRequest}\n\nReference image analysis: ${imageAnalysis}\n\nGenerate ${count} creative prompt variations that maintain the visual style from the analysis.`,
       },
     ],
-    max_tokens: 400,
+    max_tokens: 1500,
+    response_format: { type: "json_object" },
   });
 
-  return response.choices[0].message.content || userPrompt;
+  try {
+    const result = JSON.parse(response.choices[0].message.content || "{}");
+    const variants = result.prompts || [];
+    console.log(`Generated ${variants.length} prompt variants:`, variants);
+    return variants.length > 0 ? variants : [userRequest];
+  } catch (e) {
+    console.error("Error parsing prompt variants:", e);
+    return [userRequest];
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: ImageRequest = await req.json();
-    const { prompts, referenceImage } = body;
+    const { prompts, referenceImage, variantsCount = 4 } = body;
 
     if (!prompts || prompts.length === 0) {
       return NextResponse.json(
@@ -96,67 +107,76 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const generatePromise = prompts.map(async (prompt, index) => {
-            const imageId = `${Date.now()}-${index}`;
+          // Pentru fiecare prompt de la user, generează variante
+          for (const userPrompt of prompts) {
+            let promptsToGenerate = [userPrompt];
 
-            try {
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    id: imageId,
-                    status: "generating",
-                    prompt,
-                  })}\n`
-                )
+            // Dacă avem imagine de referință, generează variante automat
+            if (imageAnalysis) {
+              console.log(`Generating ${variantsCount} variants for: "${userPrompt}"`);
+              promptsToGenerate = await generatePromptVariants(
+                userPrompt,
+                imageAnalysis,
+                variantsCount
               );
+            }
 
-              // Îmbunătățește promptul cu AI Agent
-              let enhancedPrompt = prompt;
-              if (imageAnalysis) {
-                console.log("Creating optimized prompt with AI Agent...");
-                enhancedPrompt = await createOptimizedPrompt(prompt, imageAnalysis);
-                console.log("Optimized prompt:", enhancedPrompt);
-              }
+            // Generează imagini pentru toate variantele
+            const generatePromises = promptsToGenerate.map(async (prompt, index) => {
+              const imageId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-              const response = await openai.images.generate({
-                model: "gpt-image-1",
-                prompt: enhancedPrompt,
-                size: "1024x1024",
-                quality: "standard",
-                n: 1,
-              });
-
-              const imageUrl = response.data?.[0]?.url;
-
-              if (imageUrl) {
+              try {
                 controller.enqueue(
                   encoder.encode(
                     `data: ${JSON.stringify({
                       id: imageId,
-                      status: "done",
-                      url: imageUrl,
+                      status: "generating",
+                      prompt,
+                    })}\n`
+                  )
+                );
+
+                const response = await openai.images.generate({
+                  model: "gpt-image-1",
+                  prompt: prompt,
+                  size: "1024x1024",
+                  quality: "standard",
+                  n: 1,
+                });
+
+                const imageUrl = response.data?.[0]?.url;
+
+                if (imageUrl) {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        id: imageId,
+                        status: "done",
+                        url: imageUrl,
+                        prompt,
+                      })}\n`
+                    )
+                  );
+                }
+              } catch (error: any) {
+                const errorMsg =
+                  error?.error?.message || error?.message || "Eroare necunoscută";
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({
+                      id: imageId,
+                      status: "error",
+                      error: errorMsg,
                       prompt,
                     })}\n`
                   )
                 );
               }
-            } catch (error: any) {
-              const errorMsg =
-                error?.error?.message || error?.message || "Eroare necunoscută";
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    id: imageId,
-                    status: "error",
-                    error: errorMsg,
-                    prompt,
-                  })}\n`
-                )
-              );
-            }
-          });
+            });
 
-          await Promise.all(generatePromise);
+            await Promise.all(generatePromises);
+          }
+
           controller.close();
         } catch (error) {
           console.error("Stream error:", error);

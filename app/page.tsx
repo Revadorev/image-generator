@@ -14,6 +14,7 @@ interface GeneratedImage {
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [prompts, setPrompts] = useState<string[]>(["", "", "", ""]);
+  const [variantsCount, setVariantsCount] = useState<number>(4);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +66,7 @@ export default function Home() {
         body: JSON.stringify({
           prompts: validPrompts,
           referenceImage: referenceImage ? await fileToBase64(referenceImage) : null,
+          variantsCount: variantsCount,
         }),
       });
 
@@ -186,6 +188,27 @@ export default function Home() {
                 onChange={handleReferenceImageChange}
                 className="hidden"
               />
+              {referenceImage && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Câte variante să genereze AI-ul?
+                  </label>
+                  <select
+                    value={variantsCount}
+                    onChange={(e) => setVariantsCount(Number(e.target.value))}
+                    className="w-full border-2 border-gray-300 rounded-lg p-2 focus:border-purple-500 focus:outline-none"
+                  >
+                    <option value={2}>2 variante</option>
+                    <option value={3}>3 variante</option>
+                    <option value={4}>4 variante</option>
+                    <option value={5}>5 variante</option>
+                    <option value={6}>6 variante</option>
+                  </select>
+                  <p className="text-xs text-gray-500">
+                    AI-ul va genera automat {variantsCount} prompturi diferite bazate pe cererea ta
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-xl shadow-lg p-6 space-y-3">
