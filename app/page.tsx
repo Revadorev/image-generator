@@ -81,12 +81,16 @@ export default function Home() {
       const reader = response.body?.getReader();
       if (!reader) throw new Error("Nu se poate citi response");
 
+      console.log("Starting to read stream...");
       const decoder = new TextDecoder();
       let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log("Stream finished");
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -96,13 +100,14 @@ export default function Home() {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              console.log("Received data:", data);
               setGeneratedImages((prev) =>
                 prev.map((img) =>
                   img.id === data.id ? { ...img, ...data } : img
                 )
               );
             } catch (e) {
-              console.error("Eroare parse JSON:", e);
+              console.error("Eroare parse JSON:", e, "Line:", line);
             }
           }
         }
