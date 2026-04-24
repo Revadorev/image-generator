@@ -15,7 +15,6 @@ interface PromptTemplate {
   key: string;
   label: string;
   value: string;
-  enabled: boolean;
 }
 
 const DEFAULT_TEMPLATES: PromptTemplate[] = [
@@ -23,45 +22,44 @@ const DEFAULT_TEMPLATES: PromptTemplate[] = [
     key: "main",
     label: "MAIN",
     value: "White background, product centered, no text, clean shadow",
-    enabled: true,
   },
   {
     key: "infographic",
     label: "INFOGRAPHIC",
     value: "Icons + Romanian labels, highlight features visually",
-    enabled: true,
   },
   {
     key: "lifestyle",
     label: "LIFESTYLE",
     value: "Child using product in real environment (bedroom, school)",
-    enabled: true,
   },
   {
     key: "benefits",
     label: "BENEFITS",
     value: "Focus on emotional benefits (safety, communication)",
-    enabled: true,
   },
   {
     key: "specs",
     label: "SPECS",
     value: "Dimensions, technical specs, structured layout",
-    enabled: true,
   },
   {
     key: "premium",
     label: "PREMIUM",
     value: "Dark or gradient background, luxury lighting",
-    enabled: true,
   },
 ];
+
+const promptTemplateMap = DEFAULT_TEMPLATES.reduce<Record<string, string>>((accumulator, template) => {
+  accumulator[template.key] = template.value;
+  return accumulator;
+}, {});
 
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [prompts, setPrompts] = useState<string[]>(["", "", "", ""]);
+  const [promptTypes, setPromptTypes] = useState<string[]>(["main", "infographic", "lifestyle", "benefits"]);
   const [variantsCount, setVariantsCount] = useState<number>(4);
-  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>(DEFAULT_TEMPLATES);
   const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
   const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
@@ -71,16 +69,30 @@ export default function Home() {
 
   const handleAddPrompt = () => {
     setPrompts([...prompts, ""]);
+    setPromptTypes([...promptTypes, "main"]);
   };
 
   const handleRemovePrompt = (index: number) => {
     setPrompts(prompts.filter((_, i) => i !== index));
+    setPromptTypes(promptTypes.filter((_, i) => i !== index));
   };
 
   const handlePromptChange = (index: number, value: string) => {
     const newPrompts = [...prompts];
     newPrompts[index] = value;
     setPrompts(newPrompts);
+  };
+
+  const handlePromptTypeChange = (index: number, value: string) => {
+    const next = [...promptTypes];
+    next[index] = value;
+    const templateValue = promptTemplateMap[value] || "";
+    const nextPrompts = [...prompts];
+    if (!nextPrompts[index].trim()) {
+      nextPrompts[index] = templateValue;
+    }
+    setPromptTypes(next);
+    setPrompts(nextPrompts);
   };
 
   const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -404,84 +416,114 @@ export default function Home() {
 
           {/* Prompts Panel */}
           <div className="lg:col-span-2 space-y-4">
-            {!showPromptPreview ? (
-              <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-lg font-semibold">
-                    Prompturi ({prompts.filter((p) => p.trim()).length})
-                  </h2>
-                  <button
-                    onClick={handleAddPrompt}
-                    className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Adaugă
-                  </button>
-                </div>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {prompts.map((prompt, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <textarea
-                        placeholder={`Prompt ${idx + 1}... (ex: "Produs roșu pe fundal alb, stil minimal")`}
-                        value={prompt}
-                        onChange={(e) => handlePromptChange(idx, e.target.value)}
-                        className="flex-1 resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
-                        rows={2}
-                      />
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-semibold">
+                  Prompturi ({prompts.filter((p) => p.trim()).length})
+                </h2>
+                <button
+                  onClick={handleAddPrompt}
+                  className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adaugă
+                </button>
+              </div>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {prompts.map((prompt, idx) => (
+                  <div key={idx} className="border rounded-lg p-3 space-y-3">
+                    <div className="flex gap-2 items-center">
+                      <select
+                        value={promptTypes[idx] || 'main'}
+                        onChange={(event) => handlePromptTypeChange(idx, event.target.value)}
+                        className="w-44 border-2 border-gray-300 rounded-lg p-2 text-sm focus:border-purple-500 focus:outline-none"
+                      >
+                        {DEFAULT_TEMPLATES.map((template) => (
+                          <option key={template.key} value={template.key}>
+                            {template.label}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         onClick={() => handleRemovePrompt(idx)}
                         className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
+                        aria-label="Remove prompt"
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                    <textarea
+                      placeholder={`Prompt ${idx + 1}...`}
+                      value={prompt}
+                      onChange={(e) => handlePromptChange(idx, e.target.value)}
+                      className="w-full resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
+                      rows={3}
+                    />
+                    <div className="text-xs text-gray-500">
+                      Template default: {DEFAULT_TEMPLATES.find((template) => template.key === (promptTypes[idx] || 'main'))?.value}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : (
+            </div>
+
+            {showPromptPreview ? (
               <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-semibold">
                     Prompturi generate de GPT-5.3 ({generatedPrompts.length})
                   </h2>
-                  <span className="text-sm text-green-600 font-medium">Editează și apoi generează imaginile</span>
+                  <span className="text-sm text-green-600 font-medium">
+                    Alege tipul, apoi editează promptul
+                  </span>
                 </div>
                 <div className="space-y-3 max-h-[32rem] overflow-y-auto">
-                  {generatedPrompts.map((prompt, idx) => {
-                    const template = promptTemplates.filter((t) => t.enabled)[idx % Math.max(1, promptTemplates.filter((t) => t.enabled).length)];
-                    return (
-                      <div key={idx} className="border-2 border-green-200 rounded-lg p-3 bg-green-50">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-semibold text-green-700">
-                            {template ? `${template.label} · Variantă ${idx + 1}` : `Variantă ${idx + 1}`}
-                          </span>
-                          <button
-                            className="text-xs text-green-700 hover:underline"
-                            onClick={() => {
-                              const next = [...generatedPrompts];
-                              next[idx] = promptTemplates.filter((t) => t.enabled)[idx % Math.max(1, promptTemplates.filter((t) => t.enabled).length)]?.value || prompt;
-                              setGeneratedPrompts(next);
-                            }}
-                          >
-                            Restore template
-                          </button>
-                        </div>
-                        <textarea
-                          value={prompt}
-                          onChange={(e) => {
-                            const newPrompts = [...generatedPrompts];
-                            newPrompts[idx] = e.target.value;
-                            setGeneratedPrompts(newPrompts);
-                          }}
-                          className="w-full resize-none border-2 border-green-300 rounded-lg p-3 focus:border-green-500 focus:outline-none bg-white"
-                          rows={4}
-                        />
+                  {generatedPrompts.map((prompt, idx) => (
+                    <div key={idx} className="border-2 border-green-200 rounded-lg p-3 bg-green-50 space-y-3">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold text-green-700">Tip imagine</label>
+                        <select
+                          value={promptTypes[idx] || 'main'}
+                          onChange={(event) => handlePromptTypeChange(idx, event.target.value)}
+                          className="w-full border-2 border-green-300 rounded-lg p-2 text-sm bg-white focus:border-green-500 focus:outline-none"
+                        >
+                          {DEFAULT_TEMPLATES.map((template) => (
+                            <option key={template.key} value={template.key}>
+                              {template.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                    );
-                  })}
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-green-700">
+                          {DEFAULT_TEMPLATES.find((template) => template.key === (promptTypes[idx] || 'main'))?.label || 'MAIN'}
+                        </span>
+                        <button
+                          className="text-xs text-green-700 hover:underline"
+                          onClick={() => {
+                            const next = [...generatedPrompts];
+                            next[idx] = DEFAULT_TEMPLATES.find((template) => template.key === (promptTypes[idx] || 'main'))?.value || prompt;
+                            setGeneratedPrompts(next);
+                          }}
+                        >
+                          Restore default
+                        </button>
+                      </div>
+                      <textarea
+                        value={prompt}
+                        onChange={(e) => {
+                          const next = [...generatedPrompts];
+                          next[idx] = e.target.value;
+                          setGeneratedPrompts(next);
+                        }}
+                        className="w-full resize-none border-2 border-green-300 rounded-lg p-3 focus:border-green-500 focus:outline-none bg-white"
+                        rows={4}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 
