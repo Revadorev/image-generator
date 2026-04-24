@@ -54,13 +54,8 @@ export default function Home() {
     setError(null);
     setLoading(true);
 
-    const newImages: GeneratedImage[] = validPrompts.map((prompt, idx) => ({
-      id: `${Date.now()}-${idx}`,
-      prompt,
-      url: "",
-      status: "pending",
-    }));
-    setGeneratedImages(newImages);
+    // NU mai creăm imagini aici - le creăm când primim primul event de la server
+    setGeneratedImages([]);
 
     try {
       console.log("Fetching /api/generate...");
@@ -101,11 +96,19 @@ export default function Home() {
             try {
               const data = JSON.parse(line.slice(6));
               console.log("Received data:", data);
-              setGeneratedImages((prev) =>
-                prev.map((img) =>
+              setGeneratedImages((prev) => {
+                // Dacă imaginea nu există, o adăugăm
+                const exists = prev.find(img => img.id === data.id);
+                if (!exists) {
+                  console.log("Adding new image:", data.id);
+                  return [...prev, data];
+                }
+                // Dacă există, o actualizăm
+                console.log("Updating existing image:", data.id);
+                return prev.map((img) =>
                   img.id === data.id ? { ...img, ...data } : img
-                )
-              );
+                );
+              });
             } catch (e) {
               console.error("Eroare parse JSON:", e, "Line:", line);
             }
