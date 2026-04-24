@@ -71,8 +71,20 @@ Răspunde DOAR cu promptul final, nimic altceva.`;
 
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
-  const [agentSystemPrompt, setAgentSystemPrompt] = useState<string>(DEFAULT_AGENT_SYSTEM_PROMPT);
+  const [agentSystemPrompt, setAgentSystemPrompt] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("kidgps_agent_prompt") || DEFAULT_AGENT_SYSTEM_PROMPT;
+    }
+    return DEFAULT_AGENT_SYSTEM_PROMPT;
+  });
+  const [agentPromptSaved, setAgentPromptSaved] = useState(false);
   const [showAgentPrompt, setShowAgentPrompt] = useState(false);
+
+  const handleSaveAgentPrompt = () => {
+    localStorage.setItem("kidgps_agent_prompt", agentSystemPrompt);
+    setAgentPromptSaved(true);
+    setTimeout(() => setAgentPromptSaved(false), 2000);
+  };
   // userTexts = ce scrie utilizatorul (cererea)
   const [userTexts, setUserTexts] = useState<string[]>(["prăjitor de pâine cu 2 sloturi", "", "", ""]);
   // templateTexts = textul editabil al tipului selectat
@@ -361,7 +373,10 @@ export default function Home() {
                 <h2 className="text-lg font-semibold">Prompt Agent AI</h2>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setAgentSystemPrompt(DEFAULT_AGENT_SYSTEM_PROMPT)}
+                    onClick={() => {
+                      setAgentSystemPrompt(DEFAULT_AGENT_SYSTEM_PROMPT);
+                      localStorage.removeItem("kidgps_agent_prompt");
+                    }}
                     className="text-xs text-gray-500 hover:underline"
                   >
                     Reset
@@ -375,13 +390,28 @@ export default function Home() {
                 </div>
               </div>
               {showAgentPrompt && (
-                <textarea
-                  value={agentSystemPrompt}
-                  onChange={(e) => setAgentSystemPrompt(e.target.value)}
-                  className="w-full resize-none border-2 border-purple-200 rounded-lg p-3 text-sm focus:border-purple-500 focus:outline-none bg-purple-50"
-                  rows={8}
-                  placeholder="System prompt pentru agentul AI..."
-                />
+                <>
+                  <textarea
+                    value={agentSystemPrompt}
+                    onChange={(e) => {
+                      setAgentSystemPrompt(e.target.value);
+                      setAgentPromptSaved(false);
+                    }}
+                    className="w-full resize-none border-2 border-purple-200 rounded-lg p-3 text-sm focus:border-purple-500 focus:outline-none bg-purple-50"
+                    rows={8}
+                    placeholder="System prompt pentru agentul AI..."
+                  />
+                  <button
+                    onClick={handleSaveAgentPrompt}
+                    className={`w-full py-2 rounded-lg text-sm font-medium transition ${
+                      agentPromptSaved
+                        ? "bg-green-100 text-green-700 border-2 border-green-300"
+                        : "bg-purple-600 text-white hover:bg-purple-700"
+                    }`}
+                  >
+                    {agentPromptSaved ? "✓ Salvat!" : "Salvează prompt-ul"}
+                  </button>
+                </>
               )}
               {!showAgentPrompt && (
                 <p className="text-xs text-gray-400 italic line-clamp-2">{agentSystemPrompt.slice(0, 120)}...</p>
