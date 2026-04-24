@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
                 n: 1,
               });
 
-              const imageUrl = response.data[0].url;
+              const imageUrl = response.data?.[0]?.url;
 
               if (imageUrl) {
                 controller.enqueue(
