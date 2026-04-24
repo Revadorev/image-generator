@@ -15,7 +15,7 @@ interface ImageRequest {
   prompts: string[];
   referenceImage?: string;
   variantsCount?: number;
-  sessionId?: string; // pentru memorie
+  sessionId?: string;
 }
 
 interface ConversationMessage {
@@ -151,6 +151,7 @@ export async function POST(req: NextRequest) {
     const body: ImageRequest = await req.json();
     const { prompts, referenceImage, variantsCount = 4, sessionId = "default" } = body;
 
+
     if (!prompts || prompts.length === 0) {
       return NextResponse.json(
         { error: "Nu au fost trimise prompturi" },
@@ -213,7 +214,9 @@ export async function POST(req: NextRequest) {
 
                 const response = await openai.images.generate({
                   model: "gpt-image-1",
-                  prompt: prompt,
+                  prompt: imageAnalysis
+                    ? `${prompt}\n\nReference image analysis: ${imageAnalysis}`
+                    : prompt,
                   size: "1024x1024",
                   quality: "medium",
                   n: 1,

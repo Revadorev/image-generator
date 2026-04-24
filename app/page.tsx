@@ -215,6 +215,8 @@ export default function Home() {
     setLoading(true);
     setGeneratedImages([]);
 
+    const referenceImageBase64 = referenceImage ? await fileToBase64(referenceImage) : undefined;
+
     try {
       console.log("Fetching /api/generate...");
       const response = await fetch("/api/generate", {
@@ -222,8 +224,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompts: promptsToUse,
-          referenceImage: null, // Nu mai trimitem imaginea, prompturile sunt deja optimizate
-          variantsCount: 1, // Nu mai generăm variante, folosim prompturile editate
+          referenceImage: referenceImageBase64,
+          variantsCount: 1,
         }),
       });
 
