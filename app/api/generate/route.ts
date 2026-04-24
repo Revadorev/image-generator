@@ -20,7 +20,7 @@ async function analyzeReferenceImage(base64Image: string): Promise<string> {
         content: [
           {
             type: "text",
-            text: "Analyze this product image and describe it in detail for DALL-E 3 generation. Focus on: style, colors, composition, lighting, background, and key visual elements. Be specific and descriptive.",
+            text: "Analyze this product image in extreme detail. Describe: exact colors (hex codes if possible), materials, textures, lighting setup, composition, background style, product positioning, shadows, reflections, and any text/branding visible. Be technical and precise.",
           },
           {
             type: "image_url",
@@ -31,10 +31,34 @@ async function analyzeReferenceImage(base64Image: string): Promise<string> {
         ],
       },
     ],
-    max_tokens: 300,
+    max_tokens: 500,
   });
 
   return response.choices[0].message.content || "";
+}
+
+// Agent AI care combină analiza imaginii cu promptul utilizatorului
+async function createOptimizedPrompt(
+  userPrompt: string,
+  imageAnalysis: string
+): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an expert prompt engineer for image generation. Your job is to combine the user's request with the visual analysis of a reference image to create the perfect prompt for gpt-image-1. Be specific about style, colors, composition, and technical details. Keep the prompt under 1000 characters.",
+      },
+      {
+        role: "user",
+        content: `User request: ${userPrompt}\n\nReference image analysis: ${imageAnalysis}\n\nCreate an optimized prompt that combines both, maintaining the visual style of the reference while fulfilling the user's request.`,
+      },
+    ],
+    max_tokens: 400,
+  });
+
+  return response.choices[0].message.content || userPrompt;
 }
 
 export async function POST(req: NextRequest) {
@@ -60,6 +84,7 @@ export async function POST(req: NextRequest) {
     let imageAnalysis = "";
     if (referenceImage) {
       try {
+        console.log("Analyzing reference image with GPT-4 Vision...");
         imageAnalysis = await analyzeReferenceImage(referenceImage);
         console.log("Image analysis:", imageAnalysis);
       } catch (error) {
@@ -85,10 +110,12 @@ export async function POST(req: NextRequest) {
                 )
               );
 
-              // Îmbunătățește promptul cu analiza imaginii de referință
+              // Îmbunătățește promptul cu AI Agent
               let enhancedPrompt = prompt;
               if (imageAnalysis) {
-                enhancedPrompt = `${prompt}. Style and visual reference: ${imageAnalysis}`;
+                console.log("Creating optimized prompt with AI Agent...");
+                enhancedPrompt = await createOptimizedPrompt(prompt, imageAnalysis);
+                console.log("Optimized prompt:", enhancedPrompt);
               }
 
               const response = await openai.images.generate({
