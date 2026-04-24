@@ -1,0 +1,311 @@
+"use client";
+
+import { useState, useRef } from "react";
+import { Loader2, Plus, Trash2, Image, Download, AlertCircle } from "lucide-react";
+
+interface GeneratedImage {
+  id: string;
+  prompt: string;
+  url: string;
+  status: "pending" | "generating" | "done" | "error";
+  error?: string;
+}
+
+export default function Home() {
+  const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [prompts, setPrompts] = useState<string[]>(["", "", "", ""]);
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAddPrompt = () => {
+    setPrompts([...prompts, ""]);
+  };
+
+  const handleRemovePrompt = (index: number) => {
+    setPrompts(prompts.filter((_, i) => i !== index));
+  };
+
+  const handlePromptChange = (index: number, value: string) => {
+    const newPrompts = [...prompts];
+    newPrompts[index] = value;
+    setPrompts(newPrompts);
+  };
+
+  const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      setReferenceImage(e.target.files[0]);
+    }
+  };
+
+  const handleGenerate = async () => {
+    const validPrompts = prompts.filter((p) => p.trim());
+    if (validPrompts.length === 0) {
+      setError("Adaugă cel puțin un prompt!");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    const newImages: GeneratedImage[] = validPrompts.map((prompt, idx) => ({
+      id: `${Date.now()}-${idx}`,
+      prompt,
+      url: "",
+      status: "pending",
+    }));
+    setGeneratedImages(newImages);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompts: validPrompts,
+          referenceImage: referenceImage ? await fileToBase64(referenceImage) : null,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Eroare la generare imagini");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("Nu se poate citi response");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              setGeneratedImages((prev) =>
+                prev.map((img) =>
+                  img.id === data.id ? { ...img, ...data } : img
+                )
+              );
+            } catch (e) {
+              console.error("Eroare parse JSON:", e);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Eroare necunoscută");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadAll = () => {
+    const doneBatch = generatedImages
+      .filter((img) => img.status === "done")
+      .map((img) => `${img.prompt}\n${img.url}`)
+      .join("\n\n");
+
+    const element = document.createElement("a");
+    element.setAttribute(
+      "href",
+      "data:text/plain;charset=utf-8," + encodeURIComponent(doneBatch)
+    );
+    element.setAttribute("download", "images-links.txt");
+    element.style.display = "none";
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            AI Image Generator
+          </h1>
+          <p className="text-gray-600">Generează imagini în paralel cu DALL-E 3</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Control Panel */}
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+              <h2 className="text-lg font-semibold">Imagine de referință</h2>
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {referenceImage ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Image className="h-8 w-8 text-purple-600" />
+                    <p className="text-sm font-medium">{referenceImage.name}</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Image className="h-8 w-8 text-gray-400" />
+                    <p className="text-sm text-gray-500">Click pentru upload</p>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleReferenceImageChange}
+                className="hidden"
+              />
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-3">
+              <h2 className="text-lg font-semibold">Acțiuni</h2>
+              <button
+                onClick={handleGenerate}
+                disabled={loading || prompts.filter((p) => p.trim()).length === 0}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Generez...
+                  </>
+                ) : (
+                  "Generează imagini"
+                )}
+              </button>
+              {generatedImages.some((img) => img.status === "done") && (
+                <button
+                  onClick={handleDownloadAll}
+                  className="w-full border-2 border-gray-300 py-3 rounded-lg font-medium hover:bg-gray-50 transition flex items-center justify-center gap-2"
+                >
+                  <Download className="h-5 w-5" />
+                  Download linkuri
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Prompts Panel */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-lg font-semibold">
+                  Prompturi ({prompts.filter((p) => p.trim()).length})
+                </h2>
+                <button
+                  onClick={handleAddPrompt}
+                  className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adaugă
+                </button>
+              </div>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {prompts.map((prompt, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <textarea
+                      placeholder={`Prompt ${idx + 1}... (ex: "Produs roșu pe fundal alb, stil minimal")`}
+                      value={prompt}
+                      onChange={(e) => handlePromptChange(idx, e.target.value)}
+                      className="flex-1 resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
+                      rows={2}
+                    />
+                    <button
+                      onClick={() => handleRemovePrompt(idx)}
+                      className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Generated Images Grid */}
+        {generatedImages.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-lg font-semibold mb-4">
+              Imagini generate ({generatedImages.filter((img) => img.status === "done").length}/{generatedImages.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {generatedImages.map((img) => (
+                <div key={img.id} className="border-2 border-gray-200 rounded-lg overflow-hidden flex flex-col">
+                  <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+                    {img.status === "pending" && (
+                      <div className="text-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-2" />
+                        <p className="text-xs text-gray-500">În așteptare...</p>
+                      </div>
+                    )}
+                    {img.status === "generating" && (
+                      <div className="text-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-purple-600 mx-auto mb-2" />
+                        <p className="text-xs text-gray-600">Generez...</p>
+                      </div>
+                    )}
+                    {img.status === "done" && img.url && (
+                      <img
+                        src={img.url}
+                        alt="Generated"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    {img.status === "error" && (
+                      <div className="text-center p-4">
+                        <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500" />
+                        <p className="text-xs text-red-600">{img.error || "Eroare"}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3 flex-1 flex flex-col">
+                    <p className="text-xs text-gray-600 line-clamp-2 mb-2">
+                      {img.prompt}
+                    </p>
+                    {img.url && (
+                      <button
+                        onClick={() => window.open(img.url, "_blank")}
+                        className="mt-auto bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition text-sm"
+                      >
+                        Deschide
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(",")[1] || "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
