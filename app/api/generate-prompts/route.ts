@@ -108,7 +108,7 @@ async function generatePromptVariants(
 
   conversationHistory.push({
     role: "user",
-    content: `User request: ${userRequest}\n\nReference image analysis: ${imageAnalysis}\n\nGenerate ${count} creative prompt variations that maintain the visual style from the analysis. Remember our previous conversations and preferences.`,
+    content: `User request: ${userRequest}\n\nReference image analysis: ${imageAnalysis}\n\nGenerate ${count} creative prompt variations that maintain the visual style from the analysis. Remember our previous conversations and preferences. Return a JSON object with a "prompts" array.`,
   });
 
   const response = await openai.chat.completions.create({
