@@ -112,7 +112,7 @@ async function generatePromptVariants(
   });
 
   const response = await openai.chat.completions.create({
-    model: "gpt-5.4-pro",
+    model: "gpt-5.3-chat-latest",
     messages: conversationHistory as any,
     max_tokens: 1500,
     response_format: { type: "json_object" },
