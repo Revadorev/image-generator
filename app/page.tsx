@@ -71,6 +71,7 @@ Răspunde DOAR cu promptul final, nimic altceva.`;
 
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [styleImage, setStyleImage] = useState<File | null>(null);
   const [agentSystemPrompt, setAgentSystemPrompt] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("kidgps_agent_prompt") || DEFAULT_AGENT_SYSTEM_PROMPT;
@@ -137,9 +138,9 @@ export default function Home() {
     setTemplateTexts(nextTemplates);
   };
 
-  const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStyleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
-      setReferenceImage(e.target.files[0]);
+      setStyleImage(e.target.files[0]);
     }
   };
 
@@ -180,6 +181,7 @@ export default function Home() {
             `[${row.type.toUpperCase()}] Cerere: ${row.userText}. Stil/tip imagine: ${row.templateText}`
           ).join("\n\n"),
           referenceImage: await fileToBase64(referenceImage),
+          styleImage: styleImage ? await fileToBase64(styleImage) : undefined,
           variantsCount: validRows.length,
           sessionId: "default",
           templates: enabledTemplates,
@@ -225,6 +227,7 @@ export default function Home() {
         body: JSON.stringify({
           prompts: promptsToUse,
           referenceImage: referenceImageBase64,
+          styleImage: styleImage ? await fileToBase64(styleImage) : undefined,
           variantsCount: 1,
         }),
       });
@@ -370,9 +373,39 @@ export default function Home() {
               )}
             </div>
 
-            <div className="bg-white rounded-xl shadow-lg p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Prompt Agent AI</h2>
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+              <h2 className="text-lg font-semibold">Stil imagine (poza 2)</h2>
+              <div
+                className="border-2 border-dashed border-amber-300 rounded-lg p-8 text-center cursor-pointer hover:bg-amber-50 transition"
+                onClick={() => document.getElementById('style-image-input')?.click()}
+              >
+                {styleImage ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Image className="h-8 w-8 text-amber-600" />
+                    <p className="text-sm font-medium">{styleImage.name}</p>
+                    <p className="text-xs text-gray-500">Folosește stilul din poza 2 încărcată</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Image className="h-8 w-8 text-gray-400" />
+                    <p className="text-sm text-gray-500">Click pentru upload stil</p>
+                  </div>
+                )}
+              </div>
+              <input
+                id="style-image-input"
+                type="file"
+                accept="image/*"
+                onChange={handleStyleImageChange}
+                className="hidden"
+              />
+              {styleImage && (
+                <p className="text-xs text-amber-700">Imaginea de stil va fi transmisă agentului ca referință permanentă.</p>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+              <h2 className="text-lg font-semibold">Prompt Agent AI</h2>
                 <div className="flex gap-2">
                   <button
                     onClick={() => {

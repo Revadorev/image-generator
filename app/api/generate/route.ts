@@ -14,6 +14,7 @@ const supabase = createClient(
 interface ImageRequest {
   prompts: string[];
   referenceImage?: string;
+  styleImage?: string;
   variantsCount?: number;
   sessionId?: string;
 }
@@ -149,7 +150,7 @@ async function generatePromptVariants(
 export async function POST(req: NextRequest) {
   try {
     const body: ImageRequest = await req.json();
-    const { prompts, referenceImage, variantsCount = 4, sessionId = "default" } = body;
+    const { prompts, referenceImage, styleImage, variantsCount = 4, sessionId = "default" } = body;
 
 
     if (!prompts || prompts.length === 0) {
@@ -166,17 +167,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Analizează imaginea de referință dacă există
-    let imageAnalysis = "";
-    if (referenceImage) {
+    let styleAnalysis = "";
+    if (styleImage) {
       try {
-        console.log("Analyzing reference image with GPT-4 Vision...");
-        imageAnalysis = await analyzeReferenceImage(referenceImage);
-        console.log("Image analysis:", imageAnalysis);
+        console.log("Analyzing style image with GPT-4 Vision...");
+        styleAnalysis = await analyzeReferenceImage(styleImage);
+        console.log("Style analysis:", styleAnalysis);
       } catch (error) {
-        console.error("Error analyzing reference image:", error);
+        console.error("Error analyzing style image:", error);
       }
     }
+
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -187,11 +188,14 @@ export async function POST(req: NextRequest) {
             let promptsToGenerate = [userPrompt];
 
             // Dacă avem imagine de referință, generează variante automat cu memorie
-            if (imageAnalysis) {
+            if (imageAnalysis || styleAnalysis) {
               console.log(`Generating ${variantsCount} variants for: "${userPrompt}"`);
+              const styleInstruction = styleAnalysis
+                ? `\n\nStyle reference image analysis: ${styleAnalysis}\nUse the style, composition, lighting and mood from the style reference image (poza 2).`
+                : "";
               promptsToGenerate = await generatePromptVariants(
                 userPrompt,
-                imageAnalysis,
+                `${imageAnalysis}${styleInstruction}`,
                 variantsCount,
                 sessionId
               );
@@ -212,11 +216,13 @@ export async function POST(req: NextRequest) {
                   )
                 );
 
+                const finalPrompt = styleAnalysis
+                  ? `${prompt}\n\nUse the style from the uploaded style reference image (poza 2): ${styleAnalysis}`
+                  : prompt;
+
                 const response = await openai.images.generate({
                   model: "gpt-image-1",
-                  prompt: imageAnalysis
-                    ? `${prompt}\n\nReference image analysis: ${imageAnalysis}`
-                    : prompt,
+                  prompt: finalPrompt,
                   size: "1024x1024",
                   quality: "medium",
                   n: 1,
