@@ -219,7 +219,9 @@ export async function POST(req: NextRequest) {
                   n: 1,
                 });
 
-                const imageUrl = response.data?.[0]?.url;
+                const imageData = response.data?.[0] as any;
+                const imageUrl = imageData?.url;
+                const imageBase64 = imageData?.b64_json;
 
                 if (imageUrl) {
                   controller.enqueue(
@@ -228,6 +230,28 @@ export async function POST(req: NextRequest) {
                         id: imageId,
                         status: "done",
                         url: imageUrl,
+                        prompt,
+                      })}\n`
+                    )
+                  );
+                } else if (imageBase64) {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        id: imageId,
+                        status: "done",
+                        url: `data:image/png;base64,${imageBase64}`,
+                        prompt,
+                      })}\n`
+                    )
+                  );
+                } else {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        id: imageId,
+                        status: "error",
+                        error: "OpenAI image response did not include url or b64_json",
                         prompt,
                       })}\n`
                     )
