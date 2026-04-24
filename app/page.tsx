@@ -15,6 +15,8 @@ export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [prompts, setPrompts] = useState<string[]>(["", "", "", ""]);
   const [variantsCount, setVariantsCount] = useState<number>(4);
+  const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
+  const [showPromptPreview, setShowPromptPreview] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,13 +42,53 @@ export default function Home() {
     }
   };
 
-  const handleGenerate = async () => {
-    console.log("handleGenerate called");
-    console.log("prompts:", prompts);
+  // Pas 1: Generează prompturile cu AI Agent
+  const handleGeneratePrompts = async () => {
     const validPrompts = prompts.filter((p) => p.trim());
-    console.log("validPrompts:", validPrompts);
     if (validPrompts.length === 0) {
-      console.log("No valid prompts, showing error");
+      setError("Adaugă cel puțin un prompt!");
+      return;
+    }
+
+    if (!referenceImage) {
+      setError("Adaugă o imagine de referință!");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/generate-prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userRequest: validPrompts[0],
+          referenceImage: await fileToBase64(referenceImage),
+          variantsCount: variantsCount,
+          sessionId: "default",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Eroare la generare prompturi");
+      }
+
+      const data = await response.json();
+      setGeneratedPrompts(data.prompts || []);
+      setShowPromptPreview(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Eroare necunoscută");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Pas 2: Generează imaginile cu prompturile editate
+  const handleGenerate = async () => {
+    const promptsToUse = showPromptPreview ? generatedPrompts : prompts.filter((p) => p.trim());
+    
+    if (promptsToUse.length === 0) {
       setError("Adaugă cel puțin un prompt!");
       return;
     }
@@ -54,8 +96,6 @@ export default function Home() {
     console.log("Starting generation...");
     setError(null);
     setLoading(true);
-
-    // NU mai creăm imagini aici - le creăm când primim primul event de la server
     setGeneratedImages([]);
 
     try {
@@ -64,9 +104,9 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompts: validPrompts,
-          referenceImage: referenceImage ? await fileToBase64(referenceImage) : null,
-          variantsCount: variantsCount,
+          prompts: promptsToUse,
+          referenceImage: null, // Nu mai trimitem imaginea, prompturile sunt deja optimizate
+          variantsCount: 1, // Nu mai generăm variante, folosim prompturile editate
         }),
       });
 
@@ -213,20 +253,48 @@ export default function Home() {
 
             <div className="bg-white rounded-xl shadow-lg p-6 space-y-3">
               <h2 className="text-lg font-semibold">Acțiuni</h2>
-              <button
-                onClick={handleGenerate}
-                disabled={loading || prompts.filter((p) => p.trim()).length === 0}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Generez...
-                  </>
-                ) : (
-                  "Generează imagini"
-                )}
-              </button>
+              {!showPromptPreview ? (
+                <button
+                  onClick={handleGeneratePrompts}
+                  disabled={loading || prompts.filter((p) => p.trim()).length === 0 || !referenceImage}
+                  className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Generez prompturi...
+                    </>
+                  ) : (
+                    "Pas 1: Generează prompturi cu AI"
+                  )}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleGenerate}
+                    disabled={loading || generatedPrompts.length === 0}
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Generez imagini...
+                      </>
+                    ) : (
+                      "Pas 2: Generează imaginile"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPromptPreview(false);
+                      setGeneratedPrompts([]);
+                    }}
+                    className="w-full border-2 border-gray-300 py-2 rounded-lg font-medium hover:bg-gray-50 transition text-sm"
+                  >
+                    Înapoi la pas 1
+                  </button>
+                </>
+              )}
               {generatedImages.some((img) => img.status === "done") && (
                 <button
                   onClick={handleDownloadAll}
@@ -241,39 +309,69 @@ export default function Home() {
 
           {/* Prompts Panel */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-lg font-semibold">
-                  Prompturi ({prompts.filter((p) => p.trim()).length})
-                </h2>
-                <button
-                  onClick={handleAddPrompt}
-                  className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition"
-                >
-                  <Plus className="h-4 w-4" />
-                  Adaugă
-                </button>
+            {!showPromptPreview ? (
+              <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold">
+                    Prompturi ({prompts.filter((p) => p.trim()).length})
+                  </h2>
+                  <button
+                    onClick={handleAddPrompt}
+                    className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adaugă
+                  </button>
+                </div>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {prompts.map((prompt, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <textarea
+                        placeholder={`Prompt ${idx + 1}... (ex: "Produs roșu pe fundal alb, stil minimal")`}
+                        value={prompt}
+                        onChange={(e) => handlePromptChange(idx, e.target.value)}
+                        className="flex-1 resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
+                        rows={2}
+                      />
+                      <button
+                        onClick={() => handleRemovePrompt(idx)}
+                        className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {prompts.map((prompt, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <textarea
-                      placeholder={`Prompt ${idx + 1}... (ex: "Produs roșu pe fundal alb, stil minimal")`}
-                      value={prompt}
-                      onChange={(e) => handlePromptChange(idx, e.target.value)}
-                      className="flex-1 resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
-                      rows={2}
-                    />
-                    <button
-                      onClick={() => handleRemovePrompt(idx)}
-                      className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </div>
-                ))}
+            ) : (
+              <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-semibold">
+                    Prompturi generate de GPT-5.4-pro ({generatedPrompts.length})
+                  </h2>
+                  <span className="text-sm text-green-600 font-medium">Editează și apoi generează imaginile</span>
+                </div>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {generatedPrompts.map((prompt, idx) => (
+                    <div key={idx} className="border-2 border-green-200 rounded-lg p-3 bg-green-50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-semibold text-green-700">Variantă {idx + 1}</span>
+                      </div>
+                      <textarea
+                        value={prompt}
+                        onChange={(e) => {
+                          const newPrompts = [...generatedPrompts];
+                          newPrompts[idx] = e.target.value;
+                          setGeneratedPrompts(newPrompts);
+                        }}
+                        className="w-full resize-none border-2 border-green-300 rounded-lg p-3 focus:border-green-500 focus:outline-none bg-white"
+                        rows={3}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
