@@ -40,12 +40,17 @@ export default function Home() {
   };
 
   const handleGenerate = async () => {
+    console.log("handleGenerate called");
+    console.log("prompts:", prompts);
     const validPrompts = prompts.filter((p) => p.trim());
+    console.log("validPrompts:", validPrompts);
     if (validPrompts.length === 0) {
+      console.log("No valid prompts, showing error");
       setError("Adaugă cel puțin un prompt!");
       return;
     }
 
+    console.log("Starting generation...");
     setError(null);
     setLoading(true);
 
@@ -58,6 +63,7 @@ export default function Home() {
     setGeneratedImages(newImages);
 
     try {
+      console.log("Fetching /api/generate...");
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -67,6 +73,7 @@ export default function Home() {
         }),
       });
 
+      console.log("Response status:", response.status);
       if (!response.ok) {
         throw new Error("Eroare la generare imagini");
       }
