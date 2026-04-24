@@ -57,7 +57,15 @@ const promptTemplateMap = DEFAULT_TEMPLATES.reduce<Record<string, string>>((accu
 
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
-  const [prompts, setPrompts] = useState<string[]>(["", "", "", ""]);
+  // userTexts = ce scrie utilizatorul (cererea)
+  const [userTexts, setUserTexts] = useState<string[]>(["prăjitor de pâine cu 2 sloturi", "", "", ""]);
+  // templateTexts = textul editabil al tipului selectat
+  const [templateTexts, setTemplateTexts] = useState<string[]>([
+    DEFAULT_TEMPLATES[0].value,
+    DEFAULT_TEMPLATES[1].value,
+    DEFAULT_TEMPLATES[2].value,
+    DEFAULT_TEMPLATES[3].value,
+  ]);
   const [promptTypes, setPromptTypes] = useState<string[]>(["main", "infographic", "lifestyle", "benefits"]);
   const [variantsCount, setVariantsCount] = useState<number>(4);
   const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
@@ -68,31 +76,37 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAddPrompt = () => {
-    setPrompts([...prompts, ""]);
+    setUserTexts([...userTexts, ""]);
+    setTemplateTexts([...templateTexts, DEFAULT_TEMPLATES[0].value]);
     setPromptTypes([...promptTypes, "main"]);
   };
 
   const handleRemovePrompt = (index: number) => {
-    setPrompts(prompts.filter((_, i) => i !== index));
+    setUserTexts(userTexts.filter((_, i) => i !== index));
+    setTemplateTexts(templateTexts.filter((_, i) => i !== index));
     setPromptTypes(promptTypes.filter((_, i) => i !== index));
   };
 
   const handlePromptChange = (index: number, value: string) => {
-    const newPrompts = [...prompts];
-    newPrompts[index] = value;
-    setPrompts(newPrompts);
+    const next = [...userTexts];
+    next[index] = value;
+    setUserTexts(next);
+  };
+
+  const handleTemplateTextChange = (index: number, value: string) => {
+    const next = [...templateTexts];
+    next[index] = value;
+    setTemplateTexts(next);
   };
 
   const handlePromptTypeChange = (index: number, value: string) => {
     const next = [...promptTypes];
     next[index] = value;
-    const templateValue = promptTemplateMap[value] || "";
-    const nextPrompts = [...prompts];
-    if (!nextPrompts[index].trim()) {
-      nextPrompts[index] = templateValue;
-    }
+    // Pune textul default al tipului selectat
+    const nextTemplates = [...templateTexts];
+    nextTemplates[index] = DEFAULT_TEMPLATES.find((t) => t.key === value)?.value || "";
     setPromptTypes(next);
-    setPrompts(nextPrompts);
+    setTemplateTexts(nextTemplates);
   };
 
   const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,9 +117,14 @@ export default function Home() {
 
   // Pas 1: Generează prompturile cu AI Agent
   const handleGeneratePrompts = async () => {
-    const validPrompts = prompts.filter((p) => p.trim());
-    if (validPrompts.length === 0) {
-      setError("Adaugă cel puțin un prompt!");
+    const validRows = userTexts.map((text, idx) => ({
+      userText: text,
+      templateText: templateTexts[idx] || "",
+      type: promptTypes[idx] || "main",
+    })).filter((row) => row.userText.trim() || row.templateText.trim());
+
+    if (validRows.length === 0) {
+      setError("Adaugă cel puțin o cerere!");
       return;
     }
 
@@ -128,9 +147,12 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userRequest: validPrompts[0],
+          // Trimite fiecare rând combinat: cererea utilizatorului + template-ul tipului
+          userRequest: validRows.map((row) =>
+            `[${row.type.toUpperCase()}] Cerere: ${row.userText}. Stil/tip imagine: ${row.templateText}`
+          ).join("\n\n"),
           referenceImage: await fileToBase64(referenceImage),
-          variantsCount: variantsCount,
+          variantsCount: validRows.length,
           sessionId: "default",
           templates: enabledTemplates,
         }),
@@ -152,7 +174,7 @@ export default function Home() {
 
   // Pas 2: Generează imaginile cu prompturile editate
   const handleGenerate = async () => {
-    const promptsToUse = showPromptPreview ? generatedPrompts : prompts.filter((p) => p.trim());
+    const promptsToUse = showPromptPreview ? generatedPrompts : userTexts.filter((p) => p.trim());
     
     if (promptsToUse.length === 0) {
       setError("Adaugă cel puțin un prompt!");
@@ -322,7 +344,7 @@ export default function Home() {
               {!showPromptPreview ? (
                 <button
                   onClick={handleGeneratePrompts}
-                  disabled={loading || prompts.filter((p) => p.trim()).length === 0 || !referenceImage}
+                  disabled={loading || userTexts.filter((p) => p.trim()).length === 0 || !referenceImage}
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -378,7 +400,7 @@ export default function Home() {
             <div className="bg-white rounded-xl shadow-lg p-6 space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="text-lg font-semibold">
-                  Prompturi ({prompts.filter((p) => p.trim()).length})
+                  Prompturi ({userTexts.filter((p) => p.trim()).length})
                 </h2>
                 <button
                   onClick={handleAddPrompt}
@@ -388,38 +410,53 @@ export default function Home() {
                   Adaugă
                 </button>
               </div>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {prompts.map((prompt, idx) => (
-                  <div key={idx} className="border rounded-lg p-3 space-y-3">
+              <div className="space-y-3 max-h-[28rem] overflow-y-auto">
+                {userTexts.map((userText, idx) => (
+                  <div key={idx} className="border-2 border-gray-200 rounded-lg p-4 space-y-3">
+                    {/* Header rând */}
                     <div className="flex gap-2 items-center">
                       <select
                         value={promptTypes[idx] || 'main'}
                         onChange={(event) => handlePromptTypeChange(idx, event.target.value)}
-                        className="w-44 border-2 border-gray-300 rounded-lg p-2 text-sm focus:border-purple-500 focus:outline-none"
+                        className="w-44 border-2 border-gray-300 rounded-lg p-2 text-sm font-semibold focus:border-purple-500 focus:outline-none"
                       >
                         {DEFAULT_TEMPLATES.map((template) => (
                           <option key={template.key} value={template.key}>
-                            {template.label}
+                            🔹 {template.label}
                           </option>
                         ))}
                       </select>
                       <button
                         onClick={() => handleRemovePrompt(idx)}
-                        className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
-                        aria-label="Remove prompt"
+                        className="ml-auto text-red-400 hover:bg-red-50 p-2 rounded-lg transition"
                       >
-                        <Trash2 className="h-5 w-5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                    <textarea
-                      placeholder={`Prompt ${idx + 1}...`}
-                      value={prompt}
-                      onChange={(e) => handlePromptChange(idx, e.target.value)}
-                      className="w-full resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
-                      rows={3}
-                    />
-                    <div className="text-xs text-gray-500">
-                      Template default: {DEFAULT_TEMPLATES.find((template) => template.key === (promptTypes[idx] || 'main'))?.value}
+
+                    {/* Câmp cerere utilizator */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ce vrei tu</label>
+                      <textarea
+                        placeholder="Ex: prăjitor de pâine cu 2 sloturi ultra wide..."
+                        value={userText}
+                        onChange={(e) => handlePromptChange(idx, e.target.value)}
+                        className="w-full resize-none border-2 border-gray-300 rounded-lg p-3 focus:border-purple-500 focus:outline-none"
+                        rows={2}
+                      />
+                    </div>
+
+                    {/* Câmp template editabil */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-purple-600 uppercase tracking-wide">
+                        Stilul tipului ({DEFAULT_TEMPLATES.find((t) => t.key === (promptTypes[idx] || 'main'))?.label})
+                      </label>
+                      <textarea
+                        value={templateTexts[idx] || ''}
+                        onChange={(e) => handleTemplateTextChange(idx, e.target.value)}
+                        className="w-full resize-none border-2 border-purple-200 rounded-lg p-3 focus:border-purple-500 focus:outline-none bg-purple-50"
+                        rows={2}
+                      />
                     </div>
                   </div>
                 ))}
