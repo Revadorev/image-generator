@@ -55,8 +55,24 @@ const promptTemplateMap = DEFAULT_TEMPLATES.reduce<Record<string, string>>((accu
   return accumulator;
 }, {});
 
+const DEFAULT_AGENT_SYSTEM_PROMPT = `Ești un designer senior ecommerce specializat în imagini pentru marketplace eMAG.
+
+Sarcina ta este să transformi datele despre produs într-un prompt de generare imagini ULTRA-PERFORMANT.
+
+Reguli:
+- Păstrează designul produsului EXACT (fără schimbări de formă/culoare)
+- Text doar în română
+- Layout comercial curat
+- Fără logo-uri, fără badge-uri false
+- Contrast ridicat, pregătit pentru marketplace
+- Ierarhie vizuală clară
+
+Răspunde DOAR cu promptul final, nimic altceva.`;
+
 export default function Home() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [agentSystemPrompt, setAgentSystemPrompt] = useState<string>(DEFAULT_AGENT_SYSTEM_PROMPT);
+  const [showAgentPrompt, setShowAgentPrompt] = useState(false);
   // userTexts = ce scrie utilizatorul (cererea)
   const [userTexts, setUserTexts] = useState<string[]>(["prăjitor de pâine cu 2 sloturi", "", "", ""]);
   // templateTexts = textul editabil al tipului selectat
@@ -155,6 +171,7 @@ export default function Home() {
           variantsCount: validRows.length,
           sessionId: "default",
           templates: enabledTemplates,
+          systemPrompt: agentSystemPrompt,
         }),
       });
 
@@ -336,6 +353,38 @@ export default function Home() {
                     AI-ul va genera automat {variantsCount} prompturi diferite bazate pe cererea ta
                   </p>
                 </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-lg p-6 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Prompt Agent AI</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAgentSystemPrompt(DEFAULT_AGENT_SYSTEM_PROMPT)}
+                    className="text-xs text-gray-500 hover:underline"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={() => setShowAgentPrompt(!showAgentPrompt)}
+                    className="text-xs text-purple-600 hover:underline font-medium"
+                  >
+                    {showAgentPrompt ? "Ascunde ▲" : "Editează ▼"}
+                  </button>
+                </div>
+              </div>
+              {showAgentPrompt && (
+                <textarea
+                  value={agentSystemPrompt}
+                  onChange={(e) => setAgentSystemPrompt(e.target.value)}
+                  className="w-full resize-none border-2 border-purple-200 rounded-lg p-3 text-sm focus:border-purple-500 focus:outline-none bg-purple-50"
+                  rows={8}
+                  placeholder="System prompt pentru agentul AI..."
+                />
+              )}
+              {!showAgentPrompt && (
+                <p className="text-xs text-gray-400 italic line-clamp-2">{agentSystemPrompt.slice(0, 120)}...</p>
               )}
             </div>
 

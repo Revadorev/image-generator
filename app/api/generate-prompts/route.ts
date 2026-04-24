@@ -24,6 +24,7 @@ interface PromptRequest {
   variantsCount?: number;
   sessionId?: string;
   templates?: PromptTemplate[];
+  systemPrompt?: string;
 }
 
 const ECOMMERCE_SYSTEM_PROMPT = `You are a senior ecommerce designer specialized in marketplace images (eMAG style).
@@ -111,10 +112,17 @@ async function generatePromptVariants(
   imageAnalysis: string,
   count: number,
   sessionId: string,
-  templates: PromptTemplate[] = []
+  templates: PromptTemplate[] = [],
+  customSystemPrompt?: string
 ): Promise<string[]> {
   const conversationHistory = await loadConversationHistory(sessionId);
 
+  // Dacă vine un system prompt custom din UI, înlocuiește primul mesaj system
+  if (customSystemPrompt && conversationHistory.length > 0 && conversationHistory[0].role === "system") {
+    conversationHistory[0].content = customSystemPrompt;
+  } else if (customSystemPrompt && conversationHistory.length === 0) {
+    conversationHistory.push({ role: "system", content: customSystemPrompt });
+  }
   const templateText = templates.length
     ? `\n\nAvailable image types and base prompts:\n${templates
         .map((template) => `- ${template.label}: ${template.value}`)
@@ -153,7 +161,7 @@ async function generatePromptVariants(
 export async function POST(req: NextRequest) {
   try {
     const body: PromptRequest = await req.json();
-    const { userRequest, referenceImage, variantsCount = 4, sessionId = "default", templates = [] } = body;
+    const { userRequest, referenceImage, variantsCount = 4, sessionId = "default", templates = [], systemPrompt } = body;
 
     if (!userRequest) {
       return NextResponse.json(
@@ -179,7 +187,8 @@ export async function POST(req: NextRequest) {
       imageAnalysis,
       variantsCount,
       sessionId,
-      templates
+      templates,
+      systemPrompt
     );
 
     return NextResponse.json({ prompts });
