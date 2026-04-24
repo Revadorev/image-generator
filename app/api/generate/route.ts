@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
               }
 
               const response = await openai.images.generate({
-                model: "dall-e-3",
+                model: "gpt-image-1",
                 prompt: enhancedPrompt,
                 size: "1024x1024",
                 quality: "standard",
