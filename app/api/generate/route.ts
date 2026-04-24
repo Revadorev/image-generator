@@ -7,13 +7,40 @@ const openai = new OpenAI({
 
 interface ImageRequest {
   prompts: string[];
-  referenceImage?: string;
+  referenceImage?: string; // base64
+}
+
+// Analizează imaginea de referință cu GPT-4 Vision
+async function analyzeReferenceImage(base64Image: string): Promise<string> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "Analyze this product image and describe it in detail for DALL-E 3 generation. Focus on: style, colors, composition, lighting, background, and key visual elements. Be specific and descriptive.",
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/jpeg;base64,${base64Image}`,
+            },
+          },
+        ],
+      },
+    ],
+    max_tokens: 300,
+  });
+
+  return response.choices[0].message.content || "";
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: ImageRequest = await req.json();
-    const { prompts } = body;
+    const { prompts, referenceImage } = body;
 
     if (!prompts || prompts.length === 0) {
       return NextResponse.json(
@@ -27,6 +54,17 @@ export async function POST(req: NextRequest) {
         { error: "OPENAI_API_KEY nu este configurat" },
         { status: 500 }
       );
+    }
+
+    // Analizează imaginea de referință dacă există
+    let imageAnalysis = "";
+    if (referenceImage) {
+      try {
+        imageAnalysis = await analyzeReferenceImage(referenceImage);
+        console.log("Image analysis:", imageAnalysis);
+      } catch (error) {
+        console.error("Error analyzing reference image:", error);
+      }
     }
 
     const encoder = new TextEncoder();
@@ -47,9 +85,15 @@ export async function POST(req: NextRequest) {
                 )
               );
 
+              // Îmbunătățește promptul cu analiza imaginii de referință
+              let enhancedPrompt = prompt;
+              if (imageAnalysis) {
+                enhancedPrompt = `${prompt}. Style and visual reference: ${imageAnalysis}`;
+              }
+
               const response = await openai.images.generate({
                 model: "dall-e-3",
-                prompt: prompt,
+                prompt: enhancedPrompt,
                 size: "1024x1024",
                 quality: "standard",
                 n: 1,
